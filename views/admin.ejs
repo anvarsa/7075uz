@@ -44,9 +44,6 @@
             border-top-right-radius: 12px!important;
             padding: 1rem 1.25rem;
         }
-        .table modern-table {
-            vertical-align: middle;
-        }
         .btn-primary {
             background-color: var(--primary-color);
             border-color: var(--primary-color);
@@ -145,22 +142,17 @@
                                 <td><span class="fw-semibold"><%= l.from %></span> <i class="fa-solid fa-arrow-right text-muted mx-1"></i> <span class="fw-semibold"><%= l.to %></span></td>
                                 <td><%= l.carType %><br><small class="text-muted"><%= l.licensePlate %></small></td>
                                 <td><%= l.date %> <br><span class="badge bg-light text-dark border"><%= l.time %></span></td>
-                                
-                                <form action="/admin/listing/update/<%= l.id %>" method="POST">
-                                    <td><input type="number" name="price" value="<%= l.price %>" class="form-control form-control-sm" style="width: 110px;"></td>
-                                    <td>
-                                        <select name="status" class="form-select form-select-sm">
-                                            <option value="active" <%= l.status==='active'?'selected':'' %>>Faol</option>
-                                            <option value="cancelled" <%= l.status==='cancelled'?'selected':'' %>>Bekor qilingan</option>
-                                        </select>
-                                    </td>
-                                    <td class="text-end pe-3">
-                                        <button type="submit" class="btn btn-sm btn-outline-primary me-1" title="Saqlash"><i class="fa-solid fa-floppy-disk"></i> Saqlash</button>
-                                </form>
-                                        <form action="/admin/listing/delete/<%= l.id %>" method="POST" style="display:inline;" onsubmit="return confirm('Rostdan ham o\'chirmoqchimisiz?');">
-                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish"><i class="fa-solid fa-trash"></i></button>
-                                        </form>
-                                    </td>
+                                <td><%= Number(l.price).toLocaleString() %> so'm</td>
+                                <td>
+                                    <span class="badge <%= l.status === 'active' ? 'bg-success' : 'bg-secondary' %>">
+                                        <%= l.status === 'active' ? 'Faol' : 'Bekor qilingan' %>
+                                    </span>
+                                </td>
+                                <td class="text-end pe-3">
+                                    <form action="/admin/listing/delete/<%= l.id %>" method="POST" style="display:inline;" onsubmit="return confirm('Rostdan ham o\'chirmoqchimisiz?');">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish"><i class="fa-solid fa-trash"></i> O'chirish</button>
+                                    </form>
+                                </td>
                             </tr>
                             <% }) %>
                         <% } %>
@@ -206,7 +198,7 @@
                                     <tr><td colspan="3" class="text-center text-muted py-3">Yo'lovchilar yo'q</td></tr>
                                 <% } else { %>
                                     <% DB.passengers.forEach(p => { %>
-                                    <tr><td class="ps-3 fw-semibold"><%= p.name %></td><td><%= p.phone %></td><td><small class="text-muted"><%= p.telegramId || 'Nomaʼlum' %></small></td></tr>
+                                    <tr><td class="ps-3 fw-semibold"><%= p.name %></td><td><%= p.phone %></td><td><small class="text-muted"><%= p.id %></small></td></tr>
                                     <% }) %>
                                 <% } %>
                             </tbody>
