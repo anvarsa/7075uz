@@ -1,0 +1,30 @@
+{
+  "name": "7075-telegram-bot-mvp",
+  "version": "1.0.0",
+  "description": "7075.uz Telegram Bot MVP v1.0 - Haydovchi va yo'lovchi platform",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "dev": "nodemon bot.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "taxi",
+    "rides",
+    "mvp"
+  ],
+  "author": "7075.uz",
+  "license": "MIT",
+  "dependencies": {
+    "telegraf": "^4.14.1",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

@@ -1,0 +1,237 @@
+═══════════════════════════════════════════════════════════════════════════════
+  7075.uz TELEGRAM BOT MVP v1.0 — QUICK START
+═══════════════════════════════════════════════════════════════════════════════
+
+📦 PAKET ICHIDA (FILES)
+
+  bot.js                    — Bot asosiy logika (haydovchi, yo'lovchi, matching)
+  bot-package.json          — npm packages (Telegraf framework)
+  .env.example              — Configuration template
+  admin-panel.html          — Admin uchun ko'rib-chiqish paneli
+  BOT-SETUP.md              — Tafsiliy setup guide
+  BOT-QUICK-START.txt       — Bu fayl
+
+═══════════════════════════════════════════════════════════════════════════════
+
+⚡ TEZKOR BOSHLASH (5 MINUT)
+
+STEP 1: Node.js O'rnatish
+  Mac: brew install node
+  Windows: https://nodejs.org/
+
+STEP 2: Bot Token Olish
+  1. Telegram'da @BotFather'ga yozing
+  2. /newbot yuboring
+  3. Token olab, saqlang
+
+STEP 3: Setup
+  mkdir 7075-bot && cd 7075-bot
+  cp bot-package.json package.json
+  npm install
+  cp .env.example .env
+
+STEP 4: Config
+  .env'da BOT_TOKEN ni yangi token bilan almashtiring
+
+STEP 5: Ishga Tushirish
+  npm run dev
+  ✅ Bot online!
+
+═══════════════════════════════════════════════════════════════════════════════
+
+🤖 BOT FOYDALANISH
+
+YO'LOVCHI:
+  /start → "👤 Yo'lovchi" tanlash
+  Telefon + Ism kiriting
+  "🔍 Safar qidirish" → Yo'nalish tanlang
+  "✅ Band qilish" → Haydovchi tasdiqlashni kutish
+
+HAYDOVCHI:
+  /start → "🚗 Haydovchi" tanlash
+  Moshina, raqam, telefon, ism kiriting
+  "🚗 Elon qo'shish" → Yo'nalish, vaqt, narx
+  Yo'lovchilar ko'radi va band qiladi
+  Notification keladi → ✅ Tasdiqlash
+
+MATCHING:
+  Yo'lovchi band qilsa → Haydovchiga notification
+  Haydovchi tasdiqlasa → Yo'lovchiga notification
+  Ikkisi ham tasdiqlasa → Chat ochiladi
+
+═══════════════════════════════════════════════════════════════════════════════
+
+📊 ADMIN PANEL
+
+Browser'da admin-panel.html ni ochish
+Ko'rish mumkin:
+  ✓ Tasdiqlash navbatidagi haydovchilar
+  ✓ Barcha haydovchilar va yo'lovchilar
+  ✓ Faol elon-lar
+  ✓ Mos qolganlar
+
+═══════════════════════════════════════════════════════════════════════════════
+
+🎯 BOT FEATURES (MVP v1.0)
+
+✅ Haydovchi Ro'yxati
+   — Moshina turi (Gentra, Cobalt, Onix)
+   — Bagaj hajmi
+   — Davlat raqami
+   — Telefon + Ism
+   → Admin ma'lumotlari ko'radi va tasdiqlaydi
+
+✅ Yo'lovchi Ro'yxati
+   — Telefon + Ism
+   — Simple process
+
+✅ Elon Qo'shish
+   — Yo'nalish (Toshkent, Termiz, Qarshi)
+   — Vaqt va sana
+   — O'rindiq soni
+   — Narx (so'm)
+
+✅ Safar Qidirish
+   — Filter by yo'nalish
+   — Show matching listings
+   — One-click booking
+
+✅ Matching System
+   — Haydovchiga: "Yangi yo'lovchi!" notification
+   — Yo'lovchiga: "Haydovchi tasdiqladi!" notification
+   — Chat option
+
+✅ Admin Panel
+   — HTML (simple)
+   — Mock data
+   — Tasdiqlash queue
+
+═══════════════════════════════════════════════════════════════════════════════
+
+🔄 DATA FLOW
+
+YO'LOVCHI:
+  /start
+    ↓
+  "👤 Yo'lovchi" tanlash
+    ↓
+  Telefon + Ism
+    ↓
+  "🔍 Safar qidirish"
+    ↓
+  Yo'nalish tanlash
+    ↓
+  Listings ko'rish
+    ↓
+  "✅ Band qilish"
+    ↓
+  Haydovchiga notification
+    ↓
+  Kutish (Haydovchi tasdiqlashni)
+
+HAYDOVCHI:
+  /start
+    ↓
+  "🚗 Haydovchi" tanlash
+    ↓
+  Moshina, Bagaj, Raqam, Telefon, Ism
+    ↓
+  Admin tasdiqlash kutish
+    ↓
+  "🚗 Elon qo'shish"
+    ↓
+  Yo'nalish, Vaqt, Narx
+    ↓
+  Yo'lovchilar ko'radi
+    ↓
+  Notification: "Yangi yo'lovchi!"
+    ↓
+  ✅ Tasdiqlash
+    ↓
+  Yo'lovchiga notification
+    ↓
+  Chat ochiladi
+
+═══════════════════════════════════════════════════════════════════════════════
+
+🛠️ CONFIGURATION
+
+.env File:
+  BOT_TOKEN=YOUR_BOT_TOKEN        (BotFather'dan)
+  ADMIN_ID=123456789               (Admin telegram ID)
+  PORT=3000                        (Local dev port)
+  NODE_ENV=development             (production later)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+📈 ROADMAP
+
+MVP v1.0 (DONE):
+  ✅ Telegram Bot
+  ✅ Haydovchi/Yo'lovchi registration
+  ✅ Elon qo'shish
+  ✅ Safar qidirish
+  ✅ Matching system
+  ✅ Notifications
+  ✅ Admin panel
+
+v2.0 (Keyinchalik):
+  ⬜ NextJS Website
+  ⬜ PostgreSQL Database
+  ⬜ Authentication (JWT)
+  ⬜ Real-time Chat (WebSocket)
+  ⬜ Payment Integration (Payme, Click)
+  ⬜ Rating & Review System
+  ⬜ Admin Dashboard
+
+v3.0:
+  ⬜ React Native Mobile App (iOS/Android)
+  ⬜ GPS Integration
+  ⬜ Real-time Location Tracking
+  ⬜ In-app Payments
+  ⬜ Push Notifications
+
+═══════════════════════════════════════════════════════════════════════════════
+
+🐛 TROUBLESHOOTING
+
+"Bot token invalid"
+  → @BotFather'ga /token yuboring
+  → Yangi token olib, .env'ga qo'ying
+
+"Bot xabar chiqarmipoqda"
+  → npm run dev ko'rish
+  → Telegram bot chat ID tekshiring
+
+"Admin panel ko'rsinmaydi"
+  → Browser console (F12) check
+  → File path correct bo'lsa check
+
+═══════════════════════════════════════════════════════════════════════════════
+
+📚 COMMANDS
+
+Development:
+  npm run dev          — Auto reload
+  npm start            — Production
+
+Testing:
+  node bot.js          — Direct run
+
+═══════════════════════════════════════════════════════════════════════════════
+
+🎉 MVP v1.0 READY!
+
+Haydovchi va yo'lovchi Telegram bot'da ro'yxatdan o'ta biladi.
+Elon qo'sha biladi.
+Matching sistema ishlamoqda!
+
+Admin panel'da tasdiqlash qila biladi.
+
+Keyinchalik: Website, Backend, Mobile App qo'shiladi.
+
+═══════════════════════════════════════════════════════════════════════════════
+
+Savollar: https://t.me/BotFather
+
+Good luck! 🚀

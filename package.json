@@ -1,0 +1,20 @@
+{
+  "name": "7075-telegram-bot-mvp",
+  "version": "1.0.0",
+  "description": "7075.uz Telegram Bot MVP v1.0",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "dev": "nodemon bot.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "ejs": "^6.0.1",
+    "express": "^5.2.1",
+    "pg": "^8.23.0",
+    "telegraf": "^4.14.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
