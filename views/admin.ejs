@@ -2,62 +2,163 @@
 <html lang="uz">
 <head>
     <meta charset="UTF-8">
-    <title>7075.uz — Admin Panel</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>7075.uz — Premium Admin Panel</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-body: #f4f7f6;
+            --sidebar-bg: #1e293b;
+            --card-bg: #ffffff;
+            --primary-color: #6366f1;
+        }
+        body {
+            background-color: var(--bg-body);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #334155;
+        }
+        .navbar-brand {
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+        .stat-card {
+            border: none;
+            border-radius: 12px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .stat-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.08)!important;
+        }
+        .card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+        }
+        .card-header {
+            background-color: #fff;
+            border-bottom: 1px solid #f1f5f9;
+            font-weight: 600;
+            border-top-left-radius: 12px!important;
+            border-top-right-radius: 12px!important;
+            padding: 1rem 1.25rem;
+        }
+        .table modern-table {
+            vertical-align: middle;
+        }
+        .btn-primary {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+        .btn-primary:hover {
+            background-color: #4f46e5;
+            border-color: #4f46e5;
+        }
+    </style>
 </head>
-<body class="bg-light">
-    <div class="container py-5">
-        <h1 class="mb-4 text-center">🚗 7075.uz Admin Panel</h1>
+<body>
+
+    <!-- Top Navbar -->
+    <nav class="navbar navbar-dark bg-dark shadow-sm px-4 mb-4">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#"><i class="fa-solid fa-car-tunnel text-indigo me-2"></i>7075.uz Boshqaruv Markazi</a>
+            <span class="badge bg-success px-3 py-2 rounded-pill"><i class="fa-solid fa-circle-check me-1"></i> Onlayn</span>
+        </div>
+    </nav>
+
+    <div class="container-fluid px-4 py-2">
 
         <!-- Statistika kartochkalari -->
-        <div class="row text-center mb-4">
-            <div class="col-md-3"><div class="p-3 bg-white shadow-sm rounded"><h5>Haydovchilar</h5><h3><%= DB.drivers.length %></h3></div></div>
-            <div class="col-md-3"><div class="p-3 bg-white shadow-sm rounded"><h5>Yo'lovchilar</h5><h3><%= DB.passengers.length %></h3></div></div>
-            <div class="col-md-3"><div class="p-3 bg-white shadow-sm rounded"><h5>Faol E'lonlar</h5><h3><%= DB.listings.length %></h3></div></div>
-            <div class="col-md-3"><div class="p-3 bg-white shadow-sm rounded"><h5>Band qilinganlar</h5><h3><%= DB.matches.length %></h3></div></div>
+        <div class="row g-3 mb-4 text-center">
+            <div class="col-md-3">
+                <div class="p-3 bg-white shadow-sm stat-card border-start border-primary border-4">
+                    <div class="text-muted small mb-1"><i class="fa-solid fa-id-card me-1"></i> Haydovchilar</div>
+                    <h3 class="fw-bold text-dark mb-0"><%= DB.drivers.length %></h3>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="p-3 bg-white shadow-sm stat-card border-start border-success border-4">
+                    <div class="text-muted small mb-1"><i class="fa-solid fa-users me-1"></i> Yo'lovchilar</div>
+                    <h3 class="fw-bold text-dark mb-0"><%= DB.passengers.length %></h3>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="p-3 bg-white shadow-sm stat-card border-start border-warning border-4">
+                    <div class="text-muted small mb-1"><i class="fa-solid fa-bullhorn me-1"></i> Faol E'lonlar</div>
+                    <h3 class="fw-bold text-dark mb-0"><%= DB.listings.length %></h3>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="p-3 bg-white shadow-sm stat-card border-start border-info border-4">
+                    <div class="text-muted small mb-1"><i class="fa-solid fa-handshake me-1"></i> Band qilinganlar</div>
+                    <h3 class="fw-bold text-dark mb-0"><%= DB.matches.length %></h3>
+                </div>
+            </div>
         </div>
 
-        <!-- E'lonlar jadvali -->
+        <!-- Telegram xabar yuborish bloki -->
         <div class="card shadow-sm mb-4">
-            <div class="card-header bg-dark text-white"><b>E'lonlar va Safarlar</b></div>
-            <div class="card-body table-responsive">
-                <table class="table table-bordered align-middle">
-                    <thead>
+            <div class="card-header bg-white text-primary">
+                <i class="fa-brands fa-telegram me-2"></i><b>Barcha foydalanuvchilarga Telegram bildirishnoma yuborish</b>
+            </div>
+            <div class="card-body">
+                <form action="/admin/broadcast" method="POST" class="row g-3">
+                    <div class="col-md-10">
+                        <textarea name="message" class="form-control" rows="2" placeholder="Bot foydalanuvchilariga yuboriladigan xabar matnini kiriting..." required></textarea>
+                    </div>
+                    <div class="col-md-2 d-grid">
+                        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-paper-plane me-1"></i> Yuborish</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- E'lonlar va Safarlar jadvali -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="fa-solid fa-list-check me-2"></i><b>Faol Safar E'lonlari</b></span>
+            </div>
+            <div class="card-body table-responsive p-0">
+                <table class="table table-hover align-middle mb-0 px-3 py-2">
+                    <thead class="table-light">
                         <tr>
-                            <th>ID / Haydovchi</th>
+                            <th class="ps-3">ID / Haydovchi</th>
                             <th>Yo'nalish</th>
                             <th>Mashina</th>
                             <th>Vaqt</th>
                             <th>Narx (so'm)</th>
                             <th>Status</th>
-                            <th>Amallar</th>
+                            <th class="text-end pe-3">Amallar</th>
                         </tr>
                     </thead>
                     <tbody>
                         <% if(DB.listings.length === 0) { %>
-                            <tr><td colspan="7" class="text-center text-muted">Hozircha e'lonlar yo'q</td></tr>
+                            <tr><td colspan="7" class="text-center text-muted py-4">Hozircha faol e'lonlar mavjud emas</td></tr>
                         <% } else { %>
                             <% DB.listings.forEach(l => { %>
                             <tr>
-                                <td><b><%= l.id %></b><br><small><%= l.driverName %> (<%= l.driverPhone %>)</small></td>
-                                <td><%= l.from %> → <%= l.to %></td>
-                                <td><%= l.carType %><br><small><%= l.licensePlate %></small></td>
-                                <td><%= l.date %> | <%= l.time %></td>
+                                <td class="ps-3">
+                                    <span class="fw-bold text-primary">#<%= l.id %></span><br>
+                                    <small class="text-muted"><%= l.driverName %> (<%= l.driverPhone %>)</small>
+                                </td>
+                                <td><span class="fw-semibold"><%= l.from %></span> <i class="fa-solid fa-arrow-right text-muted mx-1"></i> <span class="fw-semibold"><%= l.to %></span></td>
+                                <td><%= l.carType %><br><small class="text-muted"><%= l.licensePlate %></small></td>
+                                <td><%= l.date %> <br><span class="badge bg-light text-dark border"><%= l.time %></span></td>
                                 
-                                <!-- Tahrirlash formasi -->
                                 <form action="/admin/listing/update/<%= l.id %>" method="POST">
-                                    <td><input type="number" name="price" value="<%= l.price %>" class="form-control form-control-sm" style="width: 100px;"></td>
+                                    <td><input type="number" name="price" value="<%= l.price %>" class="form-control form-control-sm" style="width: 110px;"></td>
                                     <td>
                                         <select name="status" class="form-select form-select-sm">
                                             <option value="active" <%= l.status==='active'?'selected':'' %>>Faol</option>
                                             <option value="cancelled" <%= l.status==='cancelled'?'selected':'' %>>Bekor qilingan</option>
                                         </select>
                                     </td>
-                                    <td>
-                                        <button type="submit" class="btn btn-sm btn-primary mb-1">Saqlash</button>
+                                    <td class="text-end pe-3">
+                                        <button type="submit" class="btn btn-sm btn-outline-primary me-1" title="Saqlash"><i class="fa-solid fa-floppy-disk"></i> Saqlash</button>
                                 </form>
-                                        <form action="/admin/listing/delete/<%= l.id %>" method="POST" style="display:inline;">
-                                            <button type="submit" class="btn btn-sm btn-danger">O'chirish</button>
+                                        <form action="/admin/listing/delete/<%= l.id %>" method="POST" style="display:inline;" onsubmit="return confirm('Rostdan ham o\'chirmoqchimisiz?');">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish"><i class="fa-solid fa-trash"></i></button>
                                         </form>
                                     </td>
                             </tr>
@@ -68,35 +169,46 @@
             </div>
         </div>
 
-        <!-- Haydovchilar jadvali -->
+        <!-- Haydovchilar va Yo'lovchilar ma'lumotlari -->
         <div class="row">
             <div class="col-md-6">
                 <div class="card shadow-sm mb-4">
-                    <div class="card-header bg-primary text-white"><b>Ro'yxatdan o'tgan Haydovchilar</b></div>
-                    <div class="card-body table-responsive">
-                        <table class="table table-sm table-striped">
-                            <thead><tr><th>Ism</th><th>Tel</th><th>Mashina</th><th>Raqam</th></tr></thead>
+                    <div class="card-header bg-white text-primary">
+                        <i class="fa-solid fa-id-badge me-2"></i><b>Ro'yxatdan o'tgan Haydovchilar</b>
+                    </div>
+                    <div class="card-body table-responsive p-0">
+                        <table class="table table-striped table-hover mb-0">
+                            <thead class="table-light"><tr><th class="ps-3">Ism</th><th>Telefon</th><th>Mashina</th><th>Raqam</th></tr></thead>
                             <tbody>
-                                <% DB.drivers.forEach(d => { %>
-                                <tr><td><%= d.name %></td><td><%= d.phone %></td><td><%= d.carType %></td><td><%= d.licensePlate %></td></tr>
-                                <% }) %>
+                                <% if(DB.drivers.length === 0) { %>
+                                    <tr><td colspan="4" class="text-center text-muted py-3">Haydovchilar yo'q</td></tr>
+                                <% } else { %>
+                                    <% DB.drivers.forEach(d => { %>
+                                    <tr><td class="ps-3 fw-semibold"><%= d.name %></td><td><%= d.phone %></td><td><%= d.carType %></td><td><span class="badge bg-secondary"><%= d.licensePlate %></span></td></tr>
+                                    <% }) %>
+                                <% } %>
                             </tbody>
                         </table>
                     </div>
                 </div>
             </div>
 
-            <!-- Yo'lovchilar jadvali -->
             <div class="col-md-6">
                 <div class="card shadow-sm mb-4">
-                    <div class="card-header bg-success text-white"><b>Ro'yxatdan o'tgan Yo'lovchilar</b></div>
-                    <div class="card-body table-responsive">
-                        <table class="table table-sm table-striped">
-                            <thead><tr><th>Ism</th><th>Telefon</th><th>Ro'yxat vaqti</th></tr></thead>
+                    <div class="card-header bg-white text-success">
+                        <i class="fa-solid fa-user-group me-2"></i><b>Ro'yxatdan o'tgan Yo'lovchilar</b>
+                    </div>
+                    <div class="card-body table-responsive p-0">
+                        <table class="table table-striped table-hover mb-0">
+                            <thead class="table-light"><tr><th class="ps-3">Ism</th><th>Telefon</th><th>Telegram ID</th></tr></thead>
                             <tbody>
-                                <% DB.passengers.forEach(p => { %>
-                                <tr><td><%= p.name %></td><td><%= p.phone %></td><td><%= new Date(p.createdAt).toLocaleTimeString() %></td></tr>
-                                <% }) %>
+                                <% if(DB.passengers.length === 0) { %>
+                                    <tr><td colspan="3" class="text-center text-muted py-3">Yo'lovchilar yo'q</td></tr>
+                                <% } else { %>
+                                    <% DB.passengers.forEach(p => { %>
+                                    <tr><td class="ps-3 fw-semibold"><%= p.name %></td><td><%= p.phone %></td><td><small class="text-muted"><%= p.telegramId || 'Nomaʼlum' %></small></td></tr>
+                                    <% }) %>
+                                <% } %>
                             </tbody>
                         </table>
                     </div>
