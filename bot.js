@@ -539,7 +539,8 @@ app.get('/admin', async (req, res) => {
         to: l.to_city,
         passengerName: l.passenger_name,
         passengerPhone: l.passenger_phone
-      }))
+      })),
+      matches: [] // Statistika xatosi chiqmasligi uchun bo'sh massiv
     };
 
     res.render('admin', { DB });
@@ -549,10 +550,39 @@ app.get('/admin', async (req, res) => {
   }
 });
 
+// E'lonni o'chirish
 app.post('/admin/listing/delete/:id', async (req, res) => {
   const id = parseInt(req.params.id);
   await pool.query('DELETE FROM listings WHERE id = $1', [id]);
   res.redirect('/admin');
+});
+
+// Admin paneldan barcha foydalanuvchilarga xabar yuborish (Broadcast)
+app.post('/admin/broadcast', async (req, res) => {
+  const { message } = req.body;
+  if (!message) return res.redirect('/admin');
+
+  try {
+    const drivers = await pool.query('SELECT DISTINCT id FROM drivers');
+    const passengers = await pool.query('SELECT DISTINCT id FROM passengers');
+
+    const userIds = new Set();
+    drivers.rows.forEach(row => userIds.add(row.id));
+    passengers.rows.forEach(row => userIds.add(row.id));
+
+    for (const chatId of userIds) {
+      try {
+        await bot.telegram.sendMessage(chatId, `📢 **Adminstratsiyadan xabar:**\n\n${message}`, { parse_mode: 'Markdown' });
+      } catch (err) {
+        console.error(`Xabar yuborilmadi (${chatId}):`, err.message);
+      }
+    }
+
+    res.redirect('/admin');
+  } catch (err) {
+    console.error('Broadcast xatoligi:', err);
+    res.status(500).send('Xabar yuborishda xatolik yuz berdi');
+  }
 });
 
 
