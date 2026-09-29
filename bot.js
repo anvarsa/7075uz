@@ -33,6 +33,26 @@ async function safeEdit(ctx, text, extra) {
   }
 }
 
+// 📅 Kelgusi kunlarni generatsiya qilish funksiyasi (Jadval uchun)
+function generateDateKeyboard() {
+  const buttons = [];
+  const today = new Date();
+  
+  for (let i = 0; i < 5; i++) {
+    const d = new Date();
+    d.setDate(today.getDate() + i);
+    const dateString = d.toISOString().split('T')[0]; // YYYY-MM-DD
+    
+    // Chiroyli format: 29-Sentyabr yoki DD.MM.YYYY
+    const dayNames = ['Yakshanba', 'Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba'];
+    const label = i === 0 ? `Bugun (${dateString})` : i === 1 ? `Ertaga (${dateString})` : `${dateString} (${dayNames[d.getDay()]})`;
+    
+    buttons.push([Markup.button.callback(label, `date_${dateString}`)]);
+  }
+  buttons.push([Markup.button.callback('← Orqaga', 'main_menu')]);
+  return Markup.inlineKeyboard(buttons);
+}
+
 // ===== TELEGRAM BOT MIDDLEWARE & LOGIC =====
 bot.use((ctx, next) => {
   if (!ctx.from) return next();
@@ -51,7 +71,7 @@ bot.use((ctx, next) => {
   return next();
 });
 
-bot.start((ctx) => {
+bot.start(async (ctx) => {
   ctx.session.step = 'role_selection';
   ctx.replyWithHTML(
     `<b>🚗 7075.uz — Taksi Platformasi</b>\n\n` +
@@ -68,8 +88,26 @@ bot.start((ctx) => {
 });
 
 // 🚗 Haydovchi roli
-bot.action('role_driver', (ctx) => {
+bot.action('role_driver', async (ctx) => {
   ctx.session.role = 'driver';
+  
+  // Bazadan haydovchi oldin ro'yxatdan o'tganligini tekshiramiz
+  const driverRes = await pool.query('SELECT * FROM drivers WHERE id = $1', [ctx.from.id]);
+  if (driverRes.rows.length > 0) {
+    const drv = driverRes.rows[0];
+    ctx.session.data.phone = drv.phone;
+    ctx.session.data.name = drv.name;
+    ctx.session.step = 'driver_main';
+    return safeEdit(ctx, `<b>🚗 Haydovchi menyusi (Oldin ro'yxatdan o'tgansiz)</b>`, {
+      parse_mode: 'HTML',
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback("🚗 E'lon qo'shish (Bo'sh o'rin)", 'driver_create_listing')],
+        [Markup.button.callback("👥 Yo'lovchilar buyurtmasini ko'rish", 'driver_search_passengers')],
+        [Markup.button.callback('❌ Chiqish', 'exit')]
+      ])
+    });
+  }
+
   ctx.session.step = 'driver_car_type';
   safeEdit(ctx, 
     `<b>🚗 Mashina turi</b>\n\nQaysi mashina bilan xizmat ko'rsatasiz?`,
@@ -84,9 +122,27 @@ bot.action('role_driver', (ctx) => {
   );
 });
 
-// 👤 Yo'lovchi roli - kontaktni so'rash
-bot.action('role_passenger', (ctx) => {
+// 👤 Yo'lovchi roli
+bot.action('role_passenger', async (ctx) => {
   ctx.session.role = 'passenger';
+
+  // Bazadan yo'lovchi oldin ro'yxatdan o'tganligini tekshiramiz
+  const passRes = await pool.query('SELECT * FROM passengers WHERE id = $1', [ctx.from.id]);
+  if (passRes.rows.length > 0) {
+    const pass = passRes.rows[0];
+    ctx.session.data.phone = pass.phone;
+    ctx.session.data.name = pass.name;
+    ctx.session.step = 'passenger_main';
+    return safeEdit(ctx, `<b>👤 Yo'lovchi menyusi (Xush kelibsiz, ${pass.name}!)</b>`, {
+      parse_mode: 'HTML',
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback('🔍 Safar qidirish (Haydovchi topish)', 'passenger_search')],
+        [Markup.button.callback('📝 E\'lon berish (Buyurtma qoldirish)', 'passenger_create_listing')],
+        [Markup.button.callback('❌ Chiqish', 'exit')]
+      ])
+    });
+  }
+
   ctx.session.step = 'passenger_contact';
   ctx.deleteMessage().catch(()=>{});
   
@@ -164,19 +220,34 @@ bot.action(/^seats_/, (ctx) => {
   const seats = ctx.match.input.replace('seats_', '');
   ctx.session.data.seats = parseInt(seats);
   ctx.session.step = 'listing_date';
-  safeEdit(ctx, `<b>📅 Safar sanasi</b>`, { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('Bugun', 'date_today')]]) });
+  
+  // Kalendar/Jadval ko'rinishidagi sanalarni chiqarish
+  safeEdit(ctx, `<b>📅 Safar sanasini tanlang:</b>`, { 
+    parse_mode: 'HTML', 
+    ...generateDateKeyboard() 
+  });
 });
 
-bot.action('date_today', (ctx) => {
-  ctx.session.data.date = new Date().toISOString().split('T')[0];
+// Haydovchi uchun sana tanlanganda
+bot.action(/^date_/, (ctx) => {
+  const selectedDate = ctx.match.input.replace('date_', '');
+  ctx.session.data.date = selectedDate;
   ctx.session.step = 'listing_time';
-  safeEdit(ctx, `<b>🕐 Ketish vaqti</b>`, { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('08:00', 'time_0800'), Markup.button.callback('14:00', 'time_1400'), Markup.button.callback('18:00', 'time_1800')]]) });
+  
+  safeEdit(ctx, `<b>🕐 Ketish vaqtini tanlang:</b>`, { 
+    parse_mode: 'HTML', 
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback('06:00', 'time_0600'), Markup.button.callback('08:00', 'time_0800')],
+      [Markup.button.callback('14:00', 'time_1400'), Markup.button.callback('18:00', 'time_1800')],
+      [Markup.button.callback('← Orqaga', 'driver_create_listing')]
+    ]) 
+  });
 });
 
 bot.action(/^time_/, (ctx) => {
   const timeKey = ctx.match.input.replace('time_', '');
-  const timeMap = { '0800': '08:00', '1400': '14:00', '1800': '18:00' };
-  ctx.session.data.time = timeMap[timeKey];
+  const timeMap = { '0600': '06:00', '0800': '08:00', '1400': '14:00', '1800': '18:00' };
+  ctx.session.data.time = timeMap[timeKey] || '08:00';
   ctx.session.step = 'listing_price_input';
   safeEdit(ctx, 
     `<b>💰 Narxni kiriting</b>\n\n1 ta o'rindiq uchun narxni raqamlarda kiriting:\n<i>Masalan: 80000</i>`,
@@ -219,7 +290,22 @@ bot.action(/^pass_to_/, (ctx) => {
 bot.action(/^pass_seats_/, (ctx) => {
   const seats = ctx.match.input.replace('pass_seats_', '');
   ctx.session.data.passSeats = parseInt(seats);
+  ctx.session.step = 'passenger_listing_date';
+  
+  // Yo'lovchi uchun ham sana tanlash kalendar/jadvali
+  safeEdit(ctx, `<b>📅 Safar sanasini tanlang:</b>`, { 
+    parse_mode: 'HTML', 
+    ...generateDateKeyboard() 
+  });
+});
+
+// Yo'lovchi sana tanlaganda
+bot.action(/^date_/, (ctx) => {
+  if (ctx.session.role !== 'passenger') return; // Agar haydovchi bo'lmasa
+  const selectedDate = ctx.match.input.replace('date_', '');
+  ctx.session.data.passDate = selectedDate;
   ctx.session.step = 'passenger_listing_price';
+  
   safeEdit(ctx, 
     `<b>💰 Taklif qilayotgan narxingiz (1 kishi uchun, so'mda):</b>\n<i>Masalan: 80000</i>`,
     { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('← Orqaga', 'passenger_create_listing')]]) }
@@ -459,7 +545,7 @@ bot.on('text', async (ctx) => {
       );
 
       ctx.session.step = 'driver_main';
-      return ctx.replyWithHTML(`<b>✅ E'loningiz joylashtirildi!</b>\nYo'nalish: ${ctx.session.data.from} → ${ctx.session.data.to}\nNarxi: ${price} so'm`, Markup.inlineKeyboard([[Markup.button.callback('🏠 Bosh menyu', 'main_menu')]]));
+      return ctx.replyWithHTML(`<b>✅ E'loningiz joylashtirildi!</b>\nYo'nalish: ${ctx.session.data.from} → ${ctx.session.data.to}\nSana: ${ctx.session.data.date} (${ctx.session.data.time})\nNarxi: ${price} so'm`, Markup.inlineKeyboard([[Markup.button.callback('🏠 Bosh menyu', 'main_menu')]]));
     }
   } 
   else if (ctx.session.role === 'passenger') {
@@ -473,13 +559,13 @@ bot.on('text', async (ctx) => {
       
       const passListingId = Date.now();
       await pool.query(
-        `INSERT INTO passenger_listings (id, passenger_id, passenger_name, passenger_phone, from_city, to_city, seats, price, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active')`,
-        [passListingId, ctx.from.id, passenger.name, passenger.phone, ctx.session.data.passFrom, ctx.session.data.passTo, ctx.session.data.passSeats, price]
+        `INSERT INTO passenger_listings (id, passenger_id, passenger_name, passenger_phone, from_city, to_city, seats, date, price, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'active')`,
+        [passListingId, ctx.from.id, passenger.name, passenger.phone, ctx.session.data.passFrom, ctx.session.data.passTo, ctx.session.data.passSeats, ctx.session.data.passDate, price]
       );
 
       ctx.session.step = 'passenger_main';
-      return ctx.replyWithHTML(`<b>✅ Buyurtmangiz joylashtirildi!</b>\nYo'nalish: ${ctx.session.data.passFrom} → ${ctx.session.data.passTo}\nTaklif narxi: ${price} so'm`, Markup.inlineKeyboard([[Markup.button.callback('🏠 Bosh menyu', 'main_menu')]]));
+      return ctx.replyWithHTML(`<b>✅ Buyurtmangiz joylashtirildi!</b>\nYo'nalish: ${ctx.session.data.passFrom} → ${ctx.session.data.passTo}\nSana: ${ctx.session.data.passDate}\nTaklif narxi: ${price} so'm`, Markup.inlineKeyboard([[Markup.button.callback('🏠 Bosh menyu', 'main_menu')]]));
     }
   }
 });
@@ -518,7 +604,6 @@ app.get('/admin', async (req, res) => {
     const listingsRes = await pool.query('SELECT * FROM listings ORDER BY created_at DESC');
     const passListingsRes = await pool.query('SELECT * FROM passenger_listings ORDER BY created_at DESC');
 
-    // EJS shabloni uchun moslashtirilgan obyekt tuzilmasi
     const DB = {
       drivers: driversRes.rows,
       passengers: passengersRes.rows,
@@ -540,11 +625,11 @@ app.get('/admin', async (req, res) => {
         passengerName: l.passenger_name,
         passengerPhone: l.passenger_phone
       })),
-      matches: [] // Statistika xatosi chiqmasligi uchun bo'sh massiv
+      matches: []
     };
 
     res.render('admin', { DB });
-  } catch (err) {
+  } ustni (err) {
     console.error(err);
     res.status(500).send("Bazadan ma'lumotlarni o'qishda xatolik yuz berdi");
   }
@@ -595,7 +680,6 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🌐 Veb Admin Panel ishga tushdi: port ${PORT}`);
 });
 
-// Eski jarayonlarni toza yopish uchun
 process.once('SIGINT', () => {
   bot.stop('SIGINT');
   process.exit(0);
