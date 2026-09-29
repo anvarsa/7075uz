@@ -43,7 +43,6 @@ function generateDateKeyboard() {
     d.setDate(today.getDate() + i);
     const dateString = d.toISOString().split('T')[0]; // YYYY-MM-DD
     
-    // Chiroyli format: 29-Sentyabr yoki DD.MM.YYYY
     const dayNames = ['Yakshanba', 'Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba'];
     const label = i === 0 ? `Bugun (${dateString})` : i === 1 ? `Ertaga (${dateString})` : `${dateString} (${dayNames[d.getDay()]})`;
     
@@ -91,7 +90,6 @@ bot.start(async (ctx) => {
 bot.action('role_driver', async (ctx) => {
   ctx.session.role = 'driver';
   
-  // Bazadan haydovchi oldin ro'yxatdan o'tganligini tekshiramiz
   const driverRes = await pool.query('SELECT * FROM drivers WHERE id = $1', [ctx.from.id]);
   if (driverRes.rows.length > 0) {
     const drv = driverRes.rows[0];
@@ -126,7 +124,6 @@ bot.action('role_driver', async (ctx) => {
 bot.action('role_passenger', async (ctx) => {
   ctx.session.role = 'passenger';
 
-  // Bazadan yo'lovchi oldin ro'yxatdan o'tganligini tekshiramiz
   const passRes = await pool.query('SELECT * FROM passengers WHERE id = $1', [ctx.from.id]);
   if (passRes.rows.length > 0) {
     const pass = passRes.rows[0];
@@ -221,16 +218,24 @@ bot.action(/^seats_/, (ctx) => {
   ctx.session.data.seats = parseInt(seats);
   ctx.session.step = 'listing_date';
   
-  // Kalendar/Jadval ko'rinishidagi sanalarni chiqarish
   safeEdit(ctx, `<b>📅 Safar sanasini tanlang:</b>`, { 
     parse_mode: 'HTML', 
     ...generateDateKeyboard() 
   });
 });
 
-// Haydovchi uchun sana tanlanganda
 bot.action(/^date_/, (ctx) => {
   const selectedDate = ctx.match.input.replace('date_', '');
+  
+  if (ctx.session.role === 'passenger') {
+    ctx.session.data.passDate = selectedDate;
+    ctx.session.step = 'passenger_listing_price';
+    return safeEdit(ctx, 
+      `<b>💰 Taklif qilayotgan narxingiz (1 kishi uchun, so'mda):</b>\n<i>Masalan: 80000</i>`,
+      { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('← Orqaga', 'passenger_create_listing')]]) }
+    );
+  }
+
   ctx.session.data.date = selectedDate;
   ctx.session.step = 'listing_time';
   
@@ -255,8 +260,7 @@ bot.action(/^time_/, (ctx) => {
   );
 });
 
-
-// ===== YO'LOVCHI: E'lon (Buyurtma) berish qadamlari =====
+// ===== YO'LOVCHI: E'lon berish qadamlari =====
 bot.action('passenger_create_listing', (ctx) => {
   ctx.session.step = 'passenger_listing_from';
   safeEdit(ctx, 
@@ -292,26 +296,11 @@ bot.action(/^pass_seats_/, (ctx) => {
   ctx.session.data.passSeats = parseInt(seats);
   ctx.session.step = 'passenger_listing_date';
   
-  // Yo'lovchi uchun ham sana tanlash kalendar/jadvali
   safeEdit(ctx, `<b>📅 Safar sanasini tanlang:</b>`, { 
     parse_mode: 'HTML', 
     ...generateDateKeyboard() 
   });
 });
-
-// Yo'lovchi sana tanlaganda
-bot.action(/^date_/, (ctx) => {
-  if (ctx.session.role !== 'passenger') return; // Agar haydovchi bo'lmasa
-  const selectedDate = ctx.match.input.replace('date_', '');
-  ctx.session.data.passDate = selectedDate;
-  ctx.session.step = 'passenger_listing_price';
-  
-  safeEdit(ctx, 
-    `<b>💰 Taklif qilayotgan narxingiz (1 kishi uchun, so'mda):</b>\n<i>Masalan: 80000</i>`,
-    { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('← Orqaga', 'passenger_create_listing')]]) }
-  );
-});
-
 
 // ===== YO'LOVCHI: Haydovchi e'lonlarini qidirish menyusi =====
 bot.action('passenger_search', (ctx) => {
@@ -378,8 +367,7 @@ bot.action('skip_listing', (ctx) => {
   safeEdit(ctx, "E'lon o'tkazib yuborildi.", Markup.inlineKeyboard([[Markup.button.callback('🔍 Qayta qidirish', 'passenger_search')]]));
 });
 
-
-// ===== HAYDIVCHI: Yo'lovchi e'lonlarini ko'rish va qidirish =====
+// ===== HAYDIVCHI: Yo'lovchi e'lonlarini ko'rish =====
 bot.action('driver_search_passengers', (ctx) => {
   ctx.session.step = 'driver_search_from';
   safeEdit(ctx, 
@@ -460,7 +448,6 @@ bot.action(/^accept_passenger_/, async (ctx) => {
   ctx.replyWithHTML(`<b>✅ Ma'lumot yo'lovchiga yuborildi!</b>`, Markup.inlineKeyboard([[Markup.button.callback('🏠 Bosh menyu', 'main_menu')]]));
 });
 
-
 // ===== CONTACT HANDLER =====
 bot.on('contact', async (ctx) => {
   const phone = ctx.message.contact.phone_number;
@@ -510,7 +497,6 @@ bot.on('contact', async (ctx) => {
     );
   }
 });
-
 
 // ===== TEXT HANDLER =====
 bot.on('text', async (ctx) => {
@@ -570,7 +556,6 @@ bot.on('text', async (ctx) => {
   }
 });
 
-
 // ===== BOSH MENYU =====
 bot.action('main_menu', (ctx) => {
   const role = ctx.session.role;
@@ -595,8 +580,7 @@ bot.action('exit', (ctx) => {
   ctx.reply('Xayr! 👋', Markup.removeKeyboard());
 });
 
-
-// ===== WEB ADMIN PANEL ROUTES (PostgreSQL dan o'qish) =====
+// ===== WEB ADMIN PANEL ROUTES =====
 app.get('/admin', async (req, res) => {
   try {
     const driversRes = await pool.query('SELECT * FROM drivers ORDER BY created_at DESC');
@@ -629,20 +613,18 @@ app.get('/admin', async (req, res) => {
     };
 
     res.render('admin', { DB });
-  } ustni (err) {
+  } catch (err) {
     console.error(err);
     res.status(500).send("Bazadan ma'lumotlarni o'qishda xatolik yuz berdi");
   }
 });
 
-// E'lonni o'chirish
 app.post('/admin/listing/delete/:id', async (req, res) => {
   const id = parseInt(req.params.id);
   await pool.query('DELETE FROM listings WHERE id = $1', [id]);
   res.redirect('/admin');
 });
 
-// Admin paneldan barcha foydalanuvchilarga xabar yuborish (Broadcast)
 app.post('/admin/broadcast', async (req, res) => {
   const { message } = req.body;
   if (!message) return res.redirect('/admin');
@@ -669,7 +651,6 @@ app.post('/admin/broadcast', async (req, res) => {
     res.status(500).send('Xabar yuborishda xatolik yuz berdi');
   }
 });
-
 
 // ===== LAUNCH BOTH =====
 bot.launch().then(() => {
