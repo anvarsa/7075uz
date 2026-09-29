@@ -586,7 +586,7 @@ app.post('/admin/broadcast', async (req, res) => {
 });
 
 
-// ===== LAUNCH BOTH (Railway uchun 0.0.0.0 shart) =====
+// ===== LAUNCH BOTH =====
 bot.launch().then(() => {
   console.log('🤖 Telegram Bot ishga tushdi!');
 });
@@ -595,5 +595,12 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🌐 Veb Admin Panel ishga tushdi: port ${PORT}`);
 });
 
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
+// Eski jarayonlarni toza yopish uchun
+process.once('SIGINT', () => {
+  bot.stop('SIGINT');
+  process.exit(0);
+});
+process.once('SIGTERM', () => {
+  bot.stop('SIGTERM');
+  process.exit(0);
+});
