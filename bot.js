@@ -102,19 +102,21 @@ function generateDateKeyboard(actionPrefix = 'date_') {
 // ===== 🔄 MOS KELUVCHI FOYDALANUVCHILARGA XABAR YUBORISH =====
 async function notifyMatchingUsers(type, listing) {
   try {
+    console.log(`Qidirilmoqda (${type}):`, listing);
     if (type === 'driver') {
       // Haydovchi e'lon berdi -> Shu yo'nalish va sanadagi yo'lovchilarni qidiramiz
       const passRes = await pool.query(
         'SELECT * FROM passengers_listings WHERE from_city = $1 AND to_city = $2 AND date = $3 AND status = \'active\'',
-        [listing.from, listing.to, listing.date]
+        [listing.from_city, listing.to_city, listing.date]
       );
+      console.log('Topilgan yo\'lovchilar soni:', passRes.rows.length);
       for (const pass of passRes.rows) {
         try {
           await bot.telegram.sendMessage(
             pass.id,
             `🔔 <b>Sizning yo'nalishingizga haydovchi topildi!</b>\n\n` +
             `<b>Mashina:</b> ${listing.car_type} (${listing.license_plate})\n` +
-            `<b>Yo'nalish:</b> ${listing.from} ➔ ${listing.to}\n` +
+            `<b>Yo'nalish:</b> ${listing.from_city} ➔ ${listing.to_city}\n` +
             `<b>Sana / Vaqt:</b> ${listing.date} | ${listing.time}\n` +
             `<b>Narx:</b> ${listing.price} so'm\n` +
             `<b>Bo'sh o'rinlar:</b> ${listing.seats} ta\n` +
@@ -127,15 +129,16 @@ async function notifyMatchingUsers(type, listing) {
       // Yo'lovchi e'lon berdi -> Shu yo'nalish va sanadagi haydovchilarni qidiramiz
       const drvRes = await pool.query(
         'SELECT * FROM drivers_listings WHERE from_city = $1 AND to_city = $2 AND date = $3 AND status = \'active\'',
-        [listing.from, listing.to, listing.date]
+        [listing.from_city, listing.to_city, listing.date]
       );
+      console.log('Topilgan haydovchilar soni:', drvRes.rows.length);
       for (const drv of drvRes.rows) {
         try {
           await bot.telegram.sendMessage(
             drv.id,
             `🔔 <b>Yo'nalishingizga yangi yo'lovchi buyurtmasi tushdi!</b>\n\n` +
             `<b>Ism:</b> ${listing.name}\n` +
-            `<b>Yo'nalish:</b> ${listing.from} ➔ ${listing.to}\n` +
+            `<b>Yo'nalish:</b> ${listing.from_city} ➔ ${listing.to_city}\n` +
             `<b>Sana:</b> ${listing.date}\n` +
             `<b>Taklif narxi:</b> ${listing.price} so'm\n` +
             `<b>Telefon:</b> ${listing.phone}`,
