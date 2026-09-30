@@ -15,7 +15,7 @@ app.use(express.json());
 
 const sessions = new Map();
 
-// 🔧 Xavfsiz tahrirlash (Message modification error bermasligi uchun)
+// 🔧 Xavfsiz tahrirlash
 async function safeEdit(ctx, text, extra) {
   try {
     return await ctx.editMessageText(text, extra);
@@ -30,7 +30,7 @@ async function safeEdit(ctx, text, extra) {
 }
 
 // 📅 Dinamik sana tugmalari generatori
-function generateDateKeyboard() {
+function generateDateKeyboard(actionPrefix = 'date_') {
   const buttons = [];
   const today = new Date();
   const dayNames = ['Yakshanba', 'Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba'];
@@ -40,13 +40,63 @@ function generateDateKeyboard() {
     d.setDate(today.getDate() + i);
     const dateString = d.toISOString().split('T')[0];
     const label = i === 0 ? `Bugun (${dateString})` : i === 1 ? `Ertaga (${dateString})` : `${dateString} (${dayNames[d.getDay()]})`;
-    buttons.push([Markup.button.callback(label, `date_${dateString}`)]);
+    buttons.push([Markup.button.callback(label, `${actionPrefix}_${dateString}`)]);
   }
   buttons.push([Markup.button.callback('← Orqaga', 'main_menu')]);
   return Markup.inlineKeyboard(buttons);
 }
 
-// ===== MIDDLEWARE (Sessiya boshqaruvi) =====
+// ===== 🔄 MOS KELUVCHI FOYDALANUVCHILARGA XABAR YUBORISH =====
+async function notifyMatchingUsers(type, listing) {
+  try {
+    // type === 'driver' bo'lsa, mos yo'lovchilarga xabar beramiz
+    // type === 'passenger' bo'lsa, mos haydovchilarga xabar beramiz
+    if (type === 'driver') {
+      const passRes = await pool.query(
+        'SELECT * FROM passengers_listings WHERE from_city = $1 AND to_city = $2 AND status = \'active\'',
+        [listing.from, listing.to]
+      );
+      for (const pass of passRes.rows) {
+        try {
+          await bot.telegram.sendMessage(
+            pass.id,
+            `🔔 <b>Sizning yo'nalishingizga haydovchi topildi!</b>\n\n` +
+            `<b>Mashina:</b> ${listing.car_type} (${listing.license_plate})\n` +
+            `<b>Yo'nalish:</b> ${listing.from} ➔ ${listing.to}\n` +
+            `<b>Sana / Vaqt:</b> ${listing.date} | ${listing.time}\n` +
+            `<b>Narx:</b> ${listing.price} so'm\n` +
+            `<b>Bo'sh o'rinlar:</b> ${listing.seats} ta\n` +
+            `<b>Telefon:</b> ${listing.phone}`,
+            { parse_mode: 'HTML' }
+          );
+        } catch (e) { console.error('Error notifying passenger:', e); }
+      }
+    } else {
+      const drvRes = await pool.query(
+        'SELECT * FROM drivers_listings WHERE from_city = $1 AND to_city = $2 AND status = \'active\'',
+        [listing.from, listing.to]
+      );
+      for (const drv of drvRes.rows) {
+        try {
+          await bot.telegram.sendMessage(
+            drv.id,
+            `🔔 <b>Yo'nalishingizga yangi yo'lovchi buyurtmasi tushdi!</b>\n\n` +
+            `<b>Ism:</b> ${listing.name}\n` +
+            `<b>Yo'nalish:</b> ${listing.from} ➔ ${listing.to}\n` +
+            `<b>Sana:</b> ${listing.date}\n` +
+            `<b>Taklif narxi:</b> ${listing.price} so'm\n` +
+            `<b>Telefon:</b> ${listing.phone}`,
+            { parse_mode: 'HTML' }
+          );
+        } catch (e) { console.error('Error notifying driver:', e); }
+      }
+    }
+  } catch (err) {
+    console.error('Matching notification error:', err);
+  }
+}
+
+// ===== MIDDLEWARE =====
 bot.use((ctx, next) => {
   if (!ctx.from) return next();
   if (!sessions.has(ctx.from.id)) {
@@ -63,12 +113,11 @@ bot.use((ctx, next) => {
   return next();
 });
 
-// ===== 1. AVTORIZATSIYA & /START =====
+// ===== 1. /START =====
 bot.start(async (ctx) => {
   const userId = ctx.from.id;
 
   try {
-    // 1. Haydovchilikka tekshirish
     const driverRes = await pool.query('SELECT * FROM drivers WHERE id = $1', [userId]);
     if (driverRes.rows.length > 0) {
       const drv = driverRes.rows[0];
@@ -78,13 +127,13 @@ bot.start(async (ctx) => {
       return ctx.replyWithHTML(`<b>🚗 Haydovchi menyusi (Xush kelibsiz, ${drv.name}!)</b>`, {
         ...Markup.inlineKeyboard([
           [Markup.button.callback("🚗 E'lon qo'shish (Bo'sh o'rin)", 'driver_create_listing')],
+          [Markup.button.callback("📋 Mening e'lonlarim", 'driver_my_listings')],
           [Markup.button.callback("👥 Yo'lovchilar buyurtmasini ko'rish", 'driver_search_passengers')],
           [Markup.button.callback('❌ Chiqish', 'exit')]
         ])
       });
     }
 
-    // 2. Yo'lovchilikka tekshirish
     const passRes = await pool.query('SELECT * FROM passengers WHERE id = $1', [userId]);
     if (passRes.rows.length > 0) {
       const pass = passRes.rows[0];
@@ -95,6 +144,7 @@ bot.start(async (ctx) => {
         ...Markup.inlineKeyboard([
           [Markup.button.callback('🔍 Safar qidirish (Haydovchi topish)', 'passenger_search')],
           [Markup.button.callback("📝 E'lon berish (Buyurtma qoldirish)", 'passenger_create_listing')],
+          [Markup.button.callback("📋 Mening e'lonlarim", 'passenger_my_listings')],
           [Markup.button.callback('❌ Chiqish', 'exit')]
         ])
       });
@@ -103,7 +153,6 @@ bot.start(async (ctx) => {
     console.error("DB Error on start:", err);
   }
 
-  // 3. Bazada yo'q bo'lsa -> Rol tanlash
   ctx.session.step = 'role_selection';
   ctx.replyWithHTML(
     `<b>🚗 7075.uz — Taksi Platformasi</b>\n\nSalom, <b>${ctx.from.first_name}</b>!\n\nSiz kimsiz?`,
@@ -114,7 +163,6 @@ bot.start(async (ctx) => {
   );
 });
 
-// Rol tanlash bosh oynasi
 bot.action('role_selection', (ctx) => {
   ctx.session.step = 'role_selection';
   safeEdit(ctx, `<b>🚗 7075.uz — Taksi Platformasi</b>\n\nSiz kimsiz?`, {
@@ -126,7 +174,7 @@ bot.action('role_selection', (ctx) => {
   });
 });
 
-// ===== 🚗 HAYDOVCHI RO'YXATDAN O'TISHI =====
+// ===== 🚗 HAYDOVCHI / 👤 YO'LOVCHI RO'YXATDAN O'TISH =====
 bot.action('role_driver', async (ctx) => {
   ctx.session.role = 'driver';
   const driverRes = await pool.query('SELECT * FROM drivers WHERE id = $1', [ctx.from.id]);
@@ -134,6 +182,7 @@ bot.action('role_driver', async (ctx) => {
   if (driverRes.rows.length > 0) {
     return ctx.deleteMessage().then(() => ctx.replyWithHTML(`<b>🚗 Haydovchi menyusi</b>`, Markup.inlineKeyboard([
       [Markup.button.callback("🚗 E'lon qo'shish (Bo'sh o'rin)", 'driver_create_listing')],
+      [Markup.button.callback("📋 Mening e'lonlarim", 'driver_my_listings')],
       [Markup.button.callback("👥 Yo'lovchilar buyurtmasini ko'rish", 'driver_search_passengers')],
       [Markup.button.callback('❌ Chiqish', 'exit')]
     ])));
@@ -147,7 +196,6 @@ bot.action('role_driver', async (ctx) => {
   );
 });
 
-// ===== 👤 YO'LOVCHI RO'YXATDAN O'TISHI =====
 bot.action('role_passenger', async (ctx) => {
   ctx.session.role = 'passenger';
   const passRes = await pool.query('SELECT * FROM passengers WHERE id = $1', [ctx.from.id]);
@@ -156,6 +204,7 @@ bot.action('role_passenger', async (ctx) => {
     return ctx.deleteMessage().then(() => ctx.replyWithHTML(`<b>👤 Yo'lovchi menyusi</b>`, Markup.inlineKeyboard([
       [Markup.button.callback('🔍 Safar qidirish (Haydovchi topish)', 'passenger_search')],
       [Markup.button.callback("📝 E'lon berish (Buyurtma qoldirish)", 'passenger_create_listing')],
+      [Markup.button.callback("📋 Mening e'lonlarim", 'passenger_my_listings')],
       [Markup.button.callback('❌ Chiqish', 'exit')]
     ])));
   }
@@ -168,7 +217,6 @@ bot.action('role_passenger', async (ctx) => {
   );
 });
 
-// ===== 📞 KONTAKT QABUL QILISH =====
 bot.on('contact', async (ctx) => {
   const phone = ctx.message.contact.phone_number;
   ctx.session.data.phone = phone;
@@ -192,12 +240,12 @@ bot.on('contact', async (ctx) => {
     return ctx.replyWithHTML(`<b>✅ Muvaffaqiyatli ro'yxatdan o'tdingiz!</b>`, Markup.inlineKeyboard([
       [Markup.button.callback('🔍 Safar qidirish (Haydovchi topish)', 'passenger_search')],
       [Markup.button.callback("📝 E'lon berish (Buyurtma qoldirish)", 'passenger_create_listing')],
+      [Markup.button.callback("📋 Mening e'lonlarim", 'passenger_my_listings')],
       [Markup.button.callback('❌ Chiqish', 'exit')]
     ]));
   }
 });
 
-// ===== MASHINA VA BAGAJ TANLASH =====
 bot.action(/^car_/, (ctx) => {
   const carType = ctx.match.input.replace('car_', '');
   const carMap = { gentra: 'Chevrolet Gentra', cobalt: 'Chevrolet Cobalt', onix: 'Onix', other: 'Boshqa' };
@@ -238,12 +286,12 @@ bot.action('car_back', (ctx) => {
   });
 });
 
-// ===== 💬 MATNLI INPUTLARNI TUTIB OLISH (TEXT HANDLER) =====
+// ===== 💬 MATNLI INPUTLAR (TEXT HANDLER) =====
 bot.on('text', async (ctx) => {
   const step = ctx.session.step;
   const text = ctx.message.text.trim();
 
-  // 1. Haydovchi davlat raqamini kiritganda -> Bazaga saqlaymiz
+  // 1. Haydovchi davlat raqami
   if (step === 'driver_license_plate') {
     ctx.session.data.licensePlate = text;
     const name = ctx.from.first_name || 'Haydovchi';
@@ -259,28 +307,91 @@ bot.on('text', async (ctx) => {
     ctx.session.step = 'driver_main';
     return ctx.replyWithHTML(`<b>✅ Muvaffaqiyatli ro'yxatdan o'tdingiz!</b>`, Markup.inlineKeyboard([
       [Markup.button.callback("🚗 E'lon qo'shish (Bo'sh o'rin)", 'driver_create_listing')],
+      [Markup.button.callback("📋 Mening e'lonlarim", 'driver_my_listings')],
       [Markup.button.callback("👥 Yo'lovchilar buyurtmasini ko'rish", 'driver_search_passengers')],
       [Markup.button.callback('❌ Chiqish', 'exit')]
     ]));
   }
 
-  // 2. Narx kiritganda
-  if (step === 'listing_price_input' || step === 'passenger_listing_price') {
+  // 2. Haydovchi narx kiritganda -> E'lonni bazaga yozish va xabar berish
+  if (step === 'listing_price_input') {
     const price = parseInt(text.replace(/\D/g, ''));
     if (isNaN(price)) {
       return ctx.reply('⚠️ Iltimos, narxni faqat raqamlarda kiriting (masalan: 80000):');
     }
-
     ctx.session.data.price = price;
-    ctx.session.step = 'main_menu';
+    const d = ctx.session.data;
 
-    return ctx.replyWithHTML(`<b>🎉 E'lon muvaffaqiyatli yaratildi!</b>\n\n<b>Narx:</b> ${price} so'm`, Markup.inlineKeyboard([
-      [Markup.button.callback('🏠 Bosh menyu', 'main_menu')]
-    ]));
+    const newListing = {
+      id: ctx.from.id,
+      name: ctx.session.firstName || 'Haydovchi',
+      phone: d.phone,
+      car_type: d.carType,
+      license_plate: d.licensePlate,
+      from: d.from,
+      to: d.to,
+      seats: d.seats,
+      date: d.date,
+      time: d.time,
+      price: price
+    };
+
+    const res = await pool.query(
+      `INSERT INTO drivers_listings (id, name, phone, car_type, license_plate, from_city, to_city, seats, date, time, price, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'active') RETURNING *`,
+      [newListing.id, newListing.name, newListing.phone, newListing.car_type, newListing.license_plate, newListing.from, newListing.to, newListing.seats, newListing.date, newListing.time, newListing.price]
+    );
+
+    // Mos keluvchi yo'lovchilarga avto xabar yuborish
+    await notifyMatchingUsers('driver', res.rows[0]);
+
+    ctx.session.step = 'driver_main';
+    return ctx.replyWithHTML(
+      `<b>🎉 E'loningiz muvaffaqiyatli joylandi!</b>\n\n` +
+      `<b>Yo'nalish:</b> ${d.from} ➔ ${d.to}\n` +
+      `<b>Sana / Vaqt:</b> ${d.date} | ${d.time}\n` +
+      `<b>Narx:</b> ${price} so'm\n` +
+      `<b>Bo'sh o'rinlar:</b> ${d.seats} ta`,
+      Markup.inlineKeyboard([
+        [Markup.button.callback('📋 Mening e\'lonlarim', 'driver_my_listings')],
+        [Markup.button.callback('🏠 Bosh menyu', 'main_menu')]
+      ])
+    );
+  }
+
+  // 3. Yo'lovchi narx kiritganda -> E'lonni bazaga yozish va xabar berish
+  if (step === 'passenger_listing_price') {
+    const price = parseInt(text.replace(/\D/g, ''));
+    if (isNaN(price)) {
+      return ctx.reply('⚠️ Iltimos, narxni faqat raqamlarda kiriting (masalan: 350.000 yoki 450.000 uzs):');
+    }
+    ctx.session.data.price = price;
+    const d = ctx.session.data;
+
+    const res = await pool.query(
+      `INSERT INTO passengers_listings (id, name, phone, from_city, to_city, date, price, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'active') RETURNING *`,
+      [ctx.from.id, ctx.from.first_name || 'Yo\'lovchi', d.phone, d.passFrom, d.passTo, d.passDate, price]
+    );
+
+    // Mos keluvchi haydovchilarga avto xabar yuborish
+    await notifyMatchingUsers('passenger', res.rows[0]);
+
+    ctx.session.step = 'passenger_main';
+    return ctx.replyWithHTML(
+      `<b>🎉 Buyurtmangiz qabul qilindi va e'lon qilindi!</b>\n\n` +
+      `<b>Yo'nalish:</b> ${d.passFrom} ➔ ${d.passTo}\n` +
+      `<b>Sana:</b> ${d.passDate}\n` +
+      `<b>Taklif narxi:</b> ${price} so'm`,
+      Markup.inlineKeyboard([
+        [Markup.button.callback('📋 Mening e\'lonlarim', 'passenger_my_listings')],
+        [Markup.button.callback('🏠 Bosh menyu', 'main_menu')]
+      ])
+    );
   }
 });
 
-// ===== HAYDOVCHI E'LON YARATISH =====
+// ===== HAYDOVCHI E'LON YARATISH QADAMLARI =====
 bot.action('driver_create_listing', (ctx) => {
   ctx.session.step = 'listing_from';
   safeEdit(ctx, `<b>🚗 Haydovchi e'loni</b>\n\n<b>📍 Qayerdan yo'lga chiqasiz?</b>`, {
@@ -328,48 +439,12 @@ bot.action(/^seats_/, (ctx) => {
 
   safeEdit(ctx, `<b>📅 Safar sanasini tanlang:</b>`, {
     parse_mode: 'HTML',
-    ...generateDateKeyboard()
+    ...generateDateKeyboard('date')
   });
 });
 
-// ===== 👤 YO'LOVCHI E'LON YARATISH & QIDIRUV =====
-bot.action('passenger_create_listing', (ctx) => {
-  ctx.session.step = 'passenger_listing_from';
-  safeEdit(ctx, `<b>📝 Yo'lovchi e'loni</b>\n\n<b>📍 Qayerdan yo'lga chiqasiz?</b>`, {
-    parse_mode: 'HTML',
-    ...Markup.inlineKeyboard([
-      [Markup.button.callback('Toshkent', 'pass_from_tsk'), Markup.button.callback('Termiz', 'pass_from_trz')],
-      [Markup.button.callback('Qarshi', 'pass_from_qrshi')],
-      [Markup.button.callback('← Orqaga', 'main_menu')]
-    ])
-  });
-});
-
-bot.action('passenger_search', (ctx) => {
-  ctx.session.step = 'search_from';
-  safeEdit(ctx, `<b>🔍 Safar qidirish</b>\n\n<b>📍 Qayerdan?</b>`, {
-    parse_mode: 'HTML',
-    ...Markup.inlineKeyboard([
-      [Markup.button.callback('Toshkent', 'search_from_tsk'), Markup.button.callback('Termiz', 'search_from_trz')],
-      [Markup.button.callback('Qarshi', 'search_from_qrshi')],
-      [Markup.button.callback('← Orqaga', 'main_menu')]
-    ])
-  });
-});
-
-// ===== SANA VA VAQT HANDLERLARI =====
 bot.action(/^date_/, (ctx) => {
   const selectedDate = ctx.match.input.replace('date_', '');
-
-  if (ctx.session.role === 'passenger') {
-    ctx.session.data.passDate = selectedDate;
-    ctx.session.step = 'passenger_listing_price';
-    return safeEdit(ctx, `<b>💰 Taklif qilayotgan narxingizni yozib yuboring (so'mda):</b>\n<i>Masalan: 80000</i>`, {
-      parse_mode: 'HTML',
-      ...Markup.inlineKeyboard([[Markup.button.callback('← Orqaga', 'main_menu')]])
-    });
-  }
-
   ctx.session.data.date = selectedDate;
   ctx.session.step = 'listing_time';
 
@@ -395,6 +470,221 @@ bot.action(/^time_/, (ctx) => {
   });
 });
 
+// ===== 👤 YO'LOVCHI E'LON YARATISH QADAMLARI =====
+bot.action('passenger_create_listing', (ctx) => {
+  ctx.session.step = 'passenger_listing_from';
+  safeEdit(ctx, `<b>📝 Yo'lovchi e'loni</b>\n\n<b>📍 Qayerdan yo'lga chiqasiz?</b>`, {
+    parse_mode: 'HTML',
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback('Toshkent', 'passfrom_tsk'), Markup.button.callback('Termiz', 'passfrom_trz')],
+      [Markup.button.callback('Qarshi', 'passfrom_qrshi')],
+      [Markup.button.callback('← Orqaga', 'main_menu')]
+    ])
+  });
+});
+
+bot.action(/^passfrom_/, (ctx) => {
+  const cityMap = { tsk: 'Toshkent', trz: 'Termiz', qrshi: 'Qarshi' };
+  ctx.session.data.passFrom = cityMap[ctx.match.input.replace('passfrom_', '')];
+  ctx.session.step = 'passenger_listing_to';
+
+  safeEdit(ctx, `<b>📍 Qayerga borasiz?</b>`, {
+    parse_mode: 'HTML',
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback('Toshkent', 'passto_tsk'), Markup.button.callback('Termiz', 'passto_trz')],
+      [Markup.button.callback('Qarshi', 'passto_qrshi')],
+      [Markup.button.callback('← Orqaga', 'passenger_create_listing')]
+    ])
+  });
+});
+
+bot.action(/^passto_/, (ctx) => {
+  const cityMap = { tsk: 'Toshkent', trz: 'Termiz', qrshi: 'Qarshi' };
+  ctx.session.data.passTo = cityMap[ctx.match.input.replace('passto_', '')];
+  ctx.session.step = 'passenger_listing_date';
+
+  safeEdit(ctx, `<b>📅 Safar sanasini tanlang:</b>`, {
+    parse_mode: 'HTML',
+    ...generateDateKeyboard('passdate')
+  });
+});
+
+bot.action(/^passdate_/, (ctx) => {
+  const selectedDate = ctx.match.input.replace('passdate_', '');
+  ctx.session.data.passDate = selectedDate;
+  ctx.session.step = 'passenger_listing_price';
+
+  safeEdit(ctx, `<b>💰 Taklif qilayotgan narxingizni yozib yuboring (so'mda):</b>\n<i>Masalan: 80000</i>`, {
+    parse_mode: 'HTML',
+    ...Markup.inlineKeyboard([[Markup.button.callback('← Orqaga', 'main_menu')]])
+  });
+});
+
+// ===== 🔍 QIDIRUV (HAYDOVCHI VA YO'LOVCHI UCHUN TO'G'RI YO'NALISH) =====
+bot.action('driver_search_passengers', (ctx) => {
+  ctx.session.step = 'search_pass_from';
+  safeEdit(ctx, `<b>👥 Yo'lovchilar buyurtmasini qidirish</b>\n\n<b>📍 Qayerdan?</b>`, {
+    parse_mode: 'HTML',
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback('Toshkent', 'spass_from_tsk'), Markup.button.callback('Termiz', 'spass_from_trz')],
+      [Markup.button.callback('Qarshi', 'spass_from_qrshi')],
+      [Markup.button.callback('← Orqaga', 'main_menu')]
+    ])
+  });
+});
+
+bot.action(/^spass_from_/, (ctx) => {
+  const cityMap = { tsk: 'Toshkent', trz: 'Termiz', qrshi: 'Qarshi' };
+  ctx.session.data.searchFrom = cityMap[ctx.match.input.replace('spass_from_', '')];
+  ctx.session.step = 'search_pass_to';
+
+  safeEdit(ctx, `<b>📍 Qayerga?</b>`, {
+    parse_mode: 'HTML',
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback('Toshkent', 'spass_to_tsk'), Markup.button.callback('Termiz', 'spass_to_trz')],
+      [Markup.button.callback('Qarshi', 'spass_to_qrshi')],
+      [Markup.button.callback('← Orqaga', 'driver_search_passengers')]
+    ])
+  });
+});
+
+bot.action(/^spass_to_/, async (ctx) => {
+  const cityMap = { tsk: 'Toshkent', trz: 'Termiz', qrshi: 'Qarshi' };
+  const searchTo = cityMap[ctx.match.input.replace('spass_to_', '')];
+  const searchFrom = ctx.session.data.searchFrom;
+
+  const res = await pool.query(
+    'SELECT * FROM passengers_listings WHERE from_city = $1 AND to_city = $2 AND status = \'active\' ORDER BY id DESC LIMIT 5',
+    [searchFrom, searchTo]
+  );
+
+  if (res.rows.length === 0) {
+    return safeEdit(ctx, `<b>❌ ${searchFrom} ➔ ${searchTo} yo'nalishi bo'yicha faol yo'lovchilar topilmadi.</b>`, {
+      parse_mode: 'HTML',
+      ...Markup.inlineKeyboard([[Markup.button.callback('← Orqaga', 'main_menu')]])
+    });
+  }
+
+  let text = `<b>👥 Topilgan yo'lovchilar (${searchFrom} ➔ ${searchTo}):</b>\n\n`;
+  res.rows.forEach((p, idx) => {
+    text += `${idx + 1}. <b>Ism:</b> ${p.name}\n` +
+            `   <b>Sana:</b> ${p.date}\n` +
+            `   <b>Taklif narxi:</b> ${p.price} so'm\n` +
+            `   <b>Telefon:</b> ${p.phone}\n\n`;
+  });
+
+  safeEdit(ctx, text, {
+    parse_mode: 'HTML',
+    ...Markup.inlineKeyboard([[Markup.button.callback('← Orqaga', 'main_menu')]])
+  });
+});
+
+bot.action('passenger_search', (ctx) => {
+  ctx.session.step = 'search_drv_from';
+  safeEdit(ctx, `<b>🔍 Safar qidirish (Haydovchi topish)</b>\n\n<b>📍 Qayerdan?</b>`, {
+    parse_mode: 'HTML',
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback('Toshkent', 'sdrv_from_tsk'), Markup.button.callback('Termiz', 'sdrv_from_trz')],
+      [Markup.button.callback('Qarshi', 'sdrv_from_qrshi')],
+      [Markup.button.callback('← Orqaga', 'main_menu')]
+    ])
+  });
+});
+
+bot.action(/^sdrv_from_/, (ctx) => {
+  const cityMap = { tsk: 'Toshkent', trz: 'Termiz', qrshi: 'Qarshi' };
+  ctx.session.data.searchDrvFrom = cityMap[ctx.match.input.replace('sdrv_from_', '')];
+  ctx.session.step = 'search_drv_to';
+
+  safeEdit(ctx, `<b>📍 Qayerga?</b>`, {
+    parse_mode: 'HTML',
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback('Toshkent', 'sdrv_to_tsk'), Markup.button.callback('Termiz', 'sdrv_to_trz')],
+      [Markup.button.callback('Qarshi', 'sdrv_to_qrshi')],
+      [Markup.button.callback('← Orqaga', 'passenger_search')]
+    ])
+  });
+});
+
+bot.action(/^sdrv_to_/, async (ctx) => {
+  const cityMap = { tsk: 'Toshkent', trz: 'Termiz', qrshi: 'Qarshi' };
+  const searchTo = cityMap[ctx.match.input.replace('sdrv_to_', '')];
+  const searchFrom = ctx.session.data.searchDrvFrom;
+
+  const res = await pool.query(
+    'SELECT * FROM drivers_listings WHERE from_city = $1 AND to_city = $2 AND status = \'active\' ORDER BY id DESC LIMIT 5',
+    [searchFrom, searchTo]
+  );
+
+  if (res.rows.length === 0) {
+    return safeEdit(ctx, `<b>❌ ${searchFrom} ➔ ${searchTo} yo'nalishi bo'yicha bo'sh o'rindiqli haydovchilar topilmadi.</b>`, {
+      parse_mode: 'HTML',
+      ...Markup.inlineKeyboard([[Markup.button.callback('← Orqaga', 'main_menu')]])
+    });
+  }
+
+  let text = `<b>🚗 Topilgan haydovchilar (${searchFrom} ➔ ${searchTo}):</b>\n\n`;
+  res.rows.forEach((d, idx) => {
+    text += `${idx + 1}. <b>Mashina:</b> ${d.car_type} (${d.license_plate})\n` +
+            `   <b>Sana/Vaqt:</b> ${d.date} | ${d.time}\n` +
+            `   <b>Bo'sh o'rin:</b> ${d.seats} ta | <b>Narx:</b> ${d.price} so'm\n` +
+            `   <b>Telefon:</b> ${d.phone}\n\n`;
+  });
+
+  safeEdit(ctx, text, {
+    parse_mode: 'HTML',
+    ...Markup.inlineKeyboard([[Markup.button.callback('← Orqaga', 'main_menu')]])
+  });
+});
+
+// ===== 📋 MENING E'LONLARIM =====
+bot.action('driver_my_listings', async (ctx) => {
+  const res = await pool.query('SELECT * FROM drivers_listings WHERE id = $1 AND status = \'active\' ORDER BY id DESC', [ctx.from.id]);
+  if (res.rows.length === 0) {
+    return safeEdit(ctx, `<b>Sizda hozircha faol e'lonlar yo'q.</b>`, {
+      parse_mode: 'HTML',
+      ...Markup.inlineKeyboard([[Markup.button.callback('← Orqaga', 'main_menu')]])
+    });
+  }
+
+  const buttons = res.rows.map(l => [Markup.button.callback(`❌ O'chirish: ${l.from_city} ➔ ${l.to_city} (${l.date})`, `del_drv_${l.id}`)]);
+  buttons.push([Markup.button.callback('← Orqaga', 'main_menu')]);
+
+  safeEdit(ctx, `<b>📋 Sizning faol e'lonlaringiz:</b>`, {
+    parse_mode: 'HTML',
+    ...Markup.inlineKeyboard(buttons)
+  });
+});
+
+bot.action(/^del_drv_/, async (ctx) => {
+  const listingId = ctx.match.input.replace('del_drv_', '');
+  await pool.query('UPDATE drivers_listings SET status = \'closed\' WHERE id = $1 AND id_user = $2', [listingId, ctx.from.id]); // yoki oddiy id bo'yicha
+  ctx.answerCbQuery("E'lon o'chirildi!");
+  ctx.session.step = 'driver_main';
+  safeEdit(ctx, `<b>✅ E'lon muvaffaqiyatli yopildi!</b>`, {
+    parse_mode: 'HTML',
+    ...Markup.inlineKeyboard([[Markup.button.callback('🏠 Bosh menyu', 'main_menu')]])
+  });
+});
+
+bot.action('passenger_my_listings', async (ctx) => {
+  const res = await pool.query('SELECT * FROM passengers_listings WHERE id = $1 AND status = \'active\' ORDER BY id DESC', [ctx.from.id]);
+  if (res.rows.length === 0) {
+    return safeEdit(ctx, `<b>Sizda hozircha faol e'lonlar yo'q.</b>`, {
+      parse_mode: 'HTML',
+      ...Markup.inlineKeyboard([[Markup.button.callback('← Orqaga', 'main_menu')]])
+    });
+  }
+
+  const buttons = res.rows.map(l => [Markup.button.callback(`❌ O'chirish: ${l.from_city} ➔ ${l.to_city} (${l.date})`, `del_pass_${l.id}`)]);
+  buttons.push([Markup.button.callback('← Orqaga', 'main_menu')]);
+
+  safeEdit(ctx, `<b>📋 Sizning faol e'lonlaringiz:</b>`, {
+    parse_mode: 'HTML',
+    ...Markup.inlineKeyboard(buttons)
+  });
+});
+
 // ===== BOSH MENYU VA CHIQISH =====
 bot.action('main_menu', async (ctx) => {
   const role = ctx.session.role;
@@ -403,6 +693,7 @@ bot.action('main_menu', async (ctx) => {
       parse_mode: 'HTML',
       ...Markup.inlineKeyboard([
         [Markup.button.callback("🚗 E'lon qo'shish (Bo'sh o'rin)", 'driver_create_listing')],
+        [Markup.button.callback("📋 Mening e'lonlarim", 'driver_my_listings')],
         [Markup.button.callback("👥 Yo'lovchilar buyurtmasini ko'rish", 'driver_search_passengers')],
         [Markup.button.callback('❌ Chiqish', 'exit')]
       ])
@@ -413,6 +704,7 @@ bot.action('main_menu', async (ctx) => {
       ...Markup.inlineKeyboard([
         [Markup.button.callback('🔍 Safar qidirish (Haydovchi topish)', 'passenger_search')],
         [Markup.button.callback("📝 E'lon berish (Buyurtma qoldirish)", 'passenger_create_listing')],
+        [Markup.button.callback("📋 Mening e'lonlarim", 'passenger_my_listings')],
         [Markup.button.callback('❌ Chiqish', 'exit')]
       ])
     });
@@ -425,6 +717,5 @@ bot.action('exit', (ctx) => {
   ctx.reply('Xayr! 👋 Botdan qayta foydalanish uchun /start bosing.', Markup.removeKeyboard());
 });
 
-// Bot va Express Serverni ishga tushirish
 bot.launch().then(() => console.log('🤖 Telegram Bot muvaffaqiyatli ishga tushdi!'));
 app.listen(PORT, '0.0.0.0', () => console.log(`🌐 Web server faol: PORT ${PORT}`));
