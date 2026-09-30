@@ -103,9 +103,10 @@ function generateDateKeyboard(actionPrefix = 'date_') {
 async function notifyMatchingUsers(type, listing) {
   try {
     if (type === 'driver') {
+      // Haydovchi e'lon berdi -> Shu yo'nalish va sanadagi yo'lovchilarni qidiramiz
       const passRes = await pool.query(
-        'SELECT * FROM passengers_listings WHERE from_city = $1 AND to_city = $2 AND status = \'active\'',
-        [listing.from, listing.to]
+        'SELECT * FROM passengers_listings WHERE from_city = $1 AND to_city = $2 AND date = $3 AND status = \'active\'',
+        [listing.from, listing.to, listing.date]
       );
       for (const pass of passRes.rows) {
         try {
@@ -123,9 +124,10 @@ async function notifyMatchingUsers(type, listing) {
         } catch (e) { console.error('Error notifying passenger:', e); }
       }
     } else {
+      // Yo'lovchi e'lon berdi -> Shu yo'nalish va sanadagi haydovchilarni qidiramiz
       const drvRes = await pool.query(
-        'SELECT * FROM drivers_listings WHERE from_city = $1 AND to_city = $2 AND status = \'active\'',
-        [listing.from, listing.to]
+        'SELECT * FROM drivers_listings WHERE from_city = $1 AND to_city = $2 AND date = $3 AND status = \'active\'',
+        [listing.from, listing.to, listing.date]
       );
       for (const drv of drvRes.rows) {
         try {
@@ -371,24 +373,10 @@ bot.on('text', async (ctx) => {
     ctx.session.data.price = price;
     const d = ctx.session.data;
 
-    const newListing = {
-      id: ctx.from.id,
-      name: ctx.session.firstName || 'Haydovchi',
-      phone: d.phone,
-      car_type: d.carType,
-      license_plate: d.licensePlate,
-      from: d.from,
-      to: d.to,
-      seats: d.seats,
-      date: d.date,
-      time: d.time,
-      price: price
-    };
-
     const res = await pool.query(
       `INSERT INTO drivers_listings (id, name, phone, car_type, license_plate, from_city, to_city, seats, date, time, price, status)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'active') RETURNING *`,
-      [newListing.id, newListing.name, newListing.phone, newListing.car_type, newListing.license_plate, newListing.from, newListing.to, newListing.seats, newListing.date, newListing.time, newListing.price]
+      [ctx.from.id, ctx.session.firstName || 'Haydovchi', d.phone, d.carType, d.licensePlate, d.from, d.to, d.seats, d.date, d.time, price]
     );
 
     await notifyMatchingUsers('driver', res.rows[0]);
@@ -614,9 +602,9 @@ bot.action(/^spass_to_/, async (ctx) => {
   let text = `<b>👥 Topilgan yo'lovchilar (${searchFrom} ➔ ${searchTo}):</b>\n\n`;
   res.rows.forEach((p, idx) => {
     text += `${idx + 1}. <b>Ism:</b> ${p.name}\n` +
-            `   <b>Sana:</b> ${p.date}\n` +
-            `   <b>Taklif narxi:</b> ${p.price} so'm\n` +
-            `   <b>Telefon:</b> ${p.phone}\n\n`;
+            `    <b>Sana:</b> ${p.date}\n` +
+            `    <b>Taklif narxi:</b> ${p.price} so'm\n` +
+            `    <b>Telefon:</b> ${p.phone}\n\n`;
   });
 
   safeEdit(ctx, text, {
@@ -672,9 +660,9 @@ bot.action(/^sdrv_to_/, async (ctx) => {
   let text = `<b>🚗 Topilgan haydovchilar (${searchFrom} ➔ ${searchTo}):</b>\n\n`;
   res.rows.forEach((d, idx) => {
     text += `${idx + 1}. <b>Mashina:</b> ${d.car_type} (${d.license_plate})\n` +
-            `   <b>Sana/Vaqt:</b> ${d.date} | ${d.time}\n` +
-            `   <b>Bo'sh o'rin:</b> ${d.seats} ta | <b>Narx:</b> ${d.price} so'm\n` +
-            `   <b>Telefon:</b> ${d.phone}\n\n`;
+            `    <b>Sana/Vaqt:</b> ${d.date} | ${d.time}\n` +
+            `    <b>Bo'sh o'rin:</b> ${d.seats} ta | <b>Narx:</b> ${d.price} so'm\n` +
+            `    <b>Telefon:</b> ${d.phone}\n\n`;
   });
 
   safeEdit(ctx, text, {
