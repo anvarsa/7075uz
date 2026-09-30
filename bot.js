@@ -15,6 +15,59 @@ app.use(express.json());
 
 const sessions = new Map();
 
+// 🗄️ Ma'lumotlar bazasi jadvallarini avtomatik yaratish
+async function initDB() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS drivers (
+        id BIGINT PRIMARY KEY,
+        name VARCHAR(255),
+        phone VARCHAR(50),
+        car_type VARCHAR(100),
+        baggage VARCHAR(100),
+        license_plate VARCHAR(50)
+      );
+
+      CREATE TABLE IF NOT EXISTS passengers (
+        id BIGINT PRIMARY KEY,
+        name VARCHAR(255),
+        phone VARCHAR(50)
+      );
+
+      CREATE TABLE IF NOT EXISTS drivers_listings (
+        serial_id SERIAL PRIMARY KEY,
+        id BIGINT,
+        name VARCHAR(255),
+        phone VARCHAR(50),
+        car_type VARCHAR(100),
+        license_plate VARCHAR(50),
+        from_city VARCHAR(100),
+        to_city VARCHAR(100),
+        seats INT,
+        date VARCHAR(50),
+        time VARCHAR(50),
+        price INT,
+        status VARCHAR(20) DEFAULT 'active'
+      );
+
+      CREATE TABLE IF NOT EXISTS passengers_listings (
+        serial_id SERIAL PRIMARY KEY,
+        id BIGINT,
+        name VARCHAR(255),
+        phone VARCHAR(50),
+        from_city VARCHAR(100),
+        to_city VARCHAR(100),
+        date VARCHAR(50),
+        price INT,
+        status VARCHAR(20) DEFAULT 'active'
+      );
+    `);
+    console.log('🗄️ PostgreSQL jadvallari muvaffaqiyatli tekshirildi/tayyorlandi!');
+  } catch (err) {
+    console.error('Database initialization error:', err);
+  }
+}
+
 // 🔧 Xavfsiz tahrirlash
 async function safeEdit(ctx, text, extra) {
   try {
@@ -49,8 +102,6 @@ function generateDateKeyboard(actionPrefix = 'date_') {
 // ===== 🔄 MOS KELUVCHI FOYDALANUVCHILARGA XABAR YUBORISH =====
 async function notifyMatchingUsers(type, listing) {
   try {
-    // type === 'driver' bo'lsa, mos yo'lovchilarga xabar beramiz
-    // type === 'passenger' bo'lsa, mos haydovchilarga xabar beramiz
     if (type === 'driver') {
       const passRes = await pool.query(
         'SELECT * FROM passengers_listings WHERE from_city = $1 AND to_city = $2 AND status = \'active\'',
@@ -291,7 +342,6 @@ bot.on('text', async (ctx) => {
   const step = ctx.session.step;
   const text = ctx.message.text.trim();
 
-  // 1. Haydovchi davlat raqami
   if (step === 'driver_license_plate') {
     ctx.session.data.licensePlate = text;
     const name = ctx.from.first_name || 'Haydovchi';
@@ -313,7 +363,6 @@ bot.on('text', async (ctx) => {
     ]));
   }
 
-  // 2. Haydovchi narx kiritganda -> E'lonni bazaga yozish va xabar berish
   if (step === 'listing_price_input') {
     const price = parseInt(text.replace(/\D/g, ''));
     if (isNaN(price)) {
@@ -342,7 +391,6 @@ bot.on('text', async (ctx) => {
       [newListing.id, newListing.name, newListing.phone, newListing.car_type, newListing.license_plate, newListing.from, newListing.to, newListing.seats, newListing.date, newListing.time, newListing.price]
     );
 
-    // Mos keluvchi yo'lovchilarga avto xabar yuborish
     await notifyMatchingUsers('driver', res.rows[0]);
 
     ctx.session.step = 'driver_main';
@@ -359,11 +407,10 @@ bot.on('text', async (ctx) => {
     );
   }
 
-  // 3. Yo'lovchi narx kiritganda -> E'lonni bazaga yozish va xabar berish
   if (step === 'passenger_listing_price') {
     const price = parseInt(text.replace(/\D/g, ''));
     if (isNaN(price)) {
-      return ctx.reply('⚠️ Iltimos, narxni faqat raqamlarda kiriting (masalan: 350.000 yoki 450.000 uzs):');
+      return ctx.reply('⚠️ Iltimos, narxni faqat raqamlarda kiriting (masalan: 80000):');
     }
     ctx.session.data.price = price;
     const d = ctx.session.data;
@@ -374,7 +421,6 @@ bot.on('text', async (ctx) => {
       [ctx.from.id, ctx.from.first_name || 'Yo\'lovchi', d.phone, d.passFrom, d.passTo, d.passDate, price]
     );
 
-    // Mos keluvchi haydovchilarga avto xabar yuborish
     await notifyMatchingUsers('passenger', res.rows[0]);
 
     ctx.session.step = 'passenger_main';
@@ -520,7 +566,7 @@ bot.action(/^passdate_/, (ctx) => {
   });
 });
 
-// ===== 🔍 QIDIRUV (HAYDOVCHI VA YO'LOVCHI UCHUN TO'G'RI YO'NALISH) =====
+// ===== 🔍 QIDIRUV =====
 bot.action('driver_search_passengers', (ctx) => {
   ctx.session.step = 'search_pass_from';
   safeEdit(ctx, `<b>👥 Yo'lovchilar buyurtmasini qidirish</b>\n\n<b>📍 Qayerdan?</b>`, {
@@ -554,7 +600,7 @@ bot.action(/^spass_to_/, async (ctx) => {
   const searchFrom = ctx.session.data.searchFrom;
 
   const res = await pool.query(
-    'SELECT * FROM passengers_listings WHERE from_city = $1 AND to_city = $2 AND status = \'active\' ORDER BY id DESC LIMIT 5',
+    'SELECT * FROM passengers_listings WHERE from_city = $1 AND to_city = $2 AND status = \'active\' ORDER BY serial_id DESC LIMIT 5',
     [searchFrom, searchTo]
   );
 
@@ -612,7 +658,7 @@ bot.action(/^sdrv_to_/, async (ctx) => {
   const searchFrom = ctx.session.data.searchDrvFrom;
 
   const res = await pool.query(
-    'SELECT * FROM drivers_listings WHERE from_city = $1 AND to_city = $2 AND status = \'active\' ORDER BY id DESC LIMIT 5',
+    'SELECT * FROM drivers_listings WHERE from_city = $1 AND to_city = $2 AND status = \'active\' ORDER BY serial_id DESC LIMIT 5',
     [searchFrom, searchTo]
   );
 
@@ -639,7 +685,7 @@ bot.action(/^sdrv_to_/, async (ctx) => {
 
 // ===== 📋 MENING E'LONLARIM =====
 bot.action('driver_my_listings', async (ctx) => {
-  const res = await pool.query('SELECT * FROM drivers_listings WHERE id = $1 AND status = \'active\' ORDER BY id DESC', [ctx.from.id]);
+  const res = await pool.query('SELECT * FROM drivers_listings WHERE id = $1 AND status = \'active\' ORDER BY serial_id DESC', [ctx.from.id]);
   if (res.rows.length === 0) {
     return safeEdit(ctx, `<b>Sizda hozircha faol e'lonlar yo'q.</b>`, {
       parse_mode: 'HTML',
@@ -647,7 +693,7 @@ bot.action('driver_my_listings', async (ctx) => {
     });
   }
 
-  const buttons = res.rows.map(l => [Markup.button.callback(`❌ O'chirish: ${l.from_city} ➔ ${l.to_city} (${l.date})`, `del_drv_${l.id}`)]);
+  const buttons = res.rows.map(l => [Markup.button.callback(`❌ O'chirish: ${l.from_city} ➔ ${l.to_city} (${l.date})`, `del_drv_${l.serial_id}`)]);
   buttons.push([Markup.button.callback('← Orqaga', 'main_menu')]);
 
   safeEdit(ctx, `<b>📋 Sizning faol e'lonlaringiz:</b>`, {
@@ -657,8 +703,8 @@ bot.action('driver_my_listings', async (ctx) => {
 });
 
 bot.action(/^del_drv_/, async (ctx) => {
-  const listingId = ctx.match.input.replace('del_drv_', '');
-  await pool.query('UPDATE drivers_listings SET status = \'closed\' WHERE id = $1 AND id_user = $2', [listingId, ctx.from.id]); // yoki oddiy id bo'yicha
+  const serialId = ctx.match.input.replace('del_drv_', '');
+  await pool.query('UPDATE drivers_listings SET status = \'closed\' WHERE serial_id = $1 AND id = $2', [serialId, ctx.from.id]);
   ctx.answerCbQuery("E'lon o'chirildi!");
   ctx.session.step = 'driver_main';
   safeEdit(ctx, `<b>✅ E'lon muvaffaqiyatli yopildi!</b>`, {
@@ -668,7 +714,7 @@ bot.action(/^del_drv_/, async (ctx) => {
 });
 
 bot.action('passenger_my_listings', async (ctx) => {
-  const res = await pool.query('SELECT * FROM passengers_listings WHERE id = $1 AND status = \'active\' ORDER BY id DESC', [ctx.from.id]);
+  const res = await pool.query('SELECT * FROM passengers_listings WHERE id = $1 AND status = \'active\' ORDER BY serial_id DESC', [ctx.from.id]);
   if (res.rows.length === 0) {
     return safeEdit(ctx, `<b>Sizda hozircha faol e'lonlar yo'q.</b>`, {
       parse_mode: 'HTML',
@@ -676,12 +722,23 @@ bot.action('passenger_my_listings', async (ctx) => {
     });
   }
 
-  const buttons = res.rows.map(l => [Markup.button.callback(`❌ O'chirish: ${l.from_city} ➔ ${l.to_city} (${l.date})`, `del_pass_${l.id}`)]);
+  const buttons = res.rows.map(l => [Markup.button.callback(`❌ O'chirish: ${l.from_city} ➔ ${l.to_city} (${l.date})`, `del_pass_${l.serial_id}`)]);
   buttons.push([Markup.button.callback('← Orqaga', 'main_menu')]);
 
   safeEdit(ctx, `<b>📋 Sizning faol e'lonlaringiz:</b>`, {
     parse_mode: 'HTML',
     ...Markup.inlineKeyboard(buttons)
+  });
+});
+
+bot.action(/^del_pass_/, async (ctx) => {
+  const serialId = ctx.match.input.replace('del_pass_', '');
+  await pool.query('UPDATE passengers_listings SET status = \'closed\' WHERE serial_id = $1 AND id = $2', [serialId, ctx.from.id]);
+  ctx.answerCbQuery("E'lon o'chirildi!");
+  ctx.session.step = 'passenger_main';
+  safeEdit(ctx, `<b>✅ E'lon muvaffaqiyatli yopildi!</b>`, {
+    parse_mode: 'HTML',
+    ...Markup.inlineKeyboard([[Markup.button.callback('🏠 Bosh menyu', 'main_menu')]])
   });
 });
 
@@ -717,5 +774,8 @@ bot.action('exit', (ctx) => {
   ctx.reply('Xayr! 👋 Botdan qayta foydalanish uchun /start bosing.', Markup.removeKeyboard());
 });
 
-bot.launch().then(() => console.log('🤖 Telegram Bot muvaffaqiyatli ishga tushdi!'));
-app.listen(PORT, '0.0.0.0', () => console.log(`🌐 Web server faol: PORT ${PORT}`));
+// Avval DB jadvallarini yaratib, keyin server va botni ishga tushiramiz
+initDB().then(() => {
+  bot.launch().then(() => console.log('🤖 Telegram Bot muvaffaqiyatli ishga tushdi!'));
+  app.listen(PORT, '0.0.0.0', () => console.log(`🌐 Web server faol: PORT ${PORT}`));
+});
